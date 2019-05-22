@@ -23,16 +23,31 @@ const Version = "0.0.0"
 const MaxRequestLength = 250 * 1024
 
 var (
-	upstreamFlag     = UpstreamFlag("upstream", &url.URL{Scheme: "https", Host: "sentry.io"}, "Upstream Sentry server")
-	listenFlag       = flag.String("listen", "127.0.0.1:8080", "Address to bind to")
-	readTimeoutFlag  = flag.Duration("read-timeout", 10*time.Second, "Read timeout")
-	writeTimeoutFlag = flag.Duration("write-timeout", 10*time.Second, "Write timeout")
-	versionFlag      = flag.Bool("version", false, "Print program version")
+	upstreamFlag       = UpstreamFlag("upstream", &url.URL{Scheme: "https", Host: "sentry.io"}, "Upstream Sentry server")
+	listenFlag         = flag.String("listen", "127.0.0.1:8080", "Address to bind to")
+	readTimeoutFlag    = flag.Duration("read-timeout", 10*time.Second, "Read timeout")
+	writeTimeoutFlag   = flag.Duration("write-timeout", 10*time.Second, "Write timeout")
+	connectTimeoutFlag = flag.Duration("connect-timeout", 10*time.Second, "Connect timeout")
+	versionFlag        = flag.Bool("version", false, "Print program version")
 )
 
 func newHandler(upstream *url.URL) http.HandlerFunc {
 	apiRe := regexp.MustCompile(`^/api/\d+/store/$`)
-	proxy := &httputil.ReverseProxy{Director: func(req *http.Request) {}}
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {},
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   *connectTimeoutFlag,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+		},
+	}
 
 	return func(w http.ResponseWriter, req *http.Request) {
 		// Don't worry about legacy endpoints, only allow POST
@@ -109,10 +124,11 @@ func main() {
                           __/ |      | |                   __/ |
                          |___/       |_|                  |___/
 `)
-	fmt.Println("- listen: ", *listenFlag)
-	fmt.Println("- upstream: ", upstreamFlag)
-	fmt.Println("- read-timeout: ", *readTimeoutFlag)
-	fmt.Println("- write-timeout: ", *writeTimeoutFlag)
+	fmt.Println("- listen:", *listenFlag)
+	fmt.Println("- upstream:", upstreamFlag)
+	fmt.Println("- read-timeout:", *readTimeoutFlag)
+	fmt.Println("- write-timeout:", *writeTimeoutFlag)
+	fmt.Println("- connect-timeout:", *connectTimeoutFlag)
 	fmt.Println("\n* Ready to serve.")
 	log.Fatal(server.ListenAndServe())
 }
