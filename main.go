@@ -23,7 +23,7 @@ const Version = "0.0.0"
 const MaxRequestLength = 250 * 1024
 
 var (
-	upstreamFlag     = flag.String("upstream", "https://sentry.io", "Upstream Sentry server")
+	upstreamFlag     = UpstreamFlag("upstream", &url.URL{Scheme: "https", Host: "sentry.io"}, "Upstream Sentry server")
 	listenFlag       = flag.String("listen", "127.0.0.1:8080", "Address to bind to")
 	readTimeoutFlag  = flag.Duration("read-timeout", 10*time.Second, "Read timeout")
 	writeTimeoutFlag = flag.Duration("write-timeout", 10*time.Second, "Write timeout")
@@ -62,7 +62,6 @@ func newHandler(upstream *url.URL) http.HandlerFunc {
 		// Try to inject our clientIP into the `user.ip_address` chunk
 		body, err = jsonparser.Set(body, []byte(`"`+clientIP+`"`), "user", "ip_address")
 		if err != nil {
-			log.Println(err)
 			http.Error(w, "invalid JSON body", 400)
 			return
 		}
@@ -79,6 +78,7 @@ func newHandler(upstream *url.URL) http.HandlerFunc {
 }
 
 func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	flag.Parse()
 }
 
@@ -88,19 +88,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Turn this into a real flag value
-	upstream, err := url.Parse(*upstreamFlag)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if upstream.Scheme == "" || upstream.Host == "" {
-		log.Fatal("Invalid '-upstream' url")
-	}
-	// Truncate the upstream path since it isn't needed
-	upstream.Path = ""
-
 	handler := logger.DefaultHandler(
-		newHandler(upstream),
+		newHandler(upstreamFlag),
 	)
 
 	server := &http.Server{
@@ -121,7 +110,7 @@ func main() {
                          |___/       |_|                  |___/
 `)
 	fmt.Println("- listen: ", *listenFlag)
-	fmt.Println("- upstream: ", upstream)
+	fmt.Println("- upstream: ", upstreamFlag)
 	fmt.Println("- read-timeout: ", *readTimeoutFlag)
 	fmt.Println("- write-timeout: ", *writeTimeoutFlag)
 	fmt.Println("\n* Ready to serve.")
