@@ -30,8 +30,7 @@ var (
 	versionFlag      = flag.Bool("version", false, "Print program version")
 )
 
-func newHandler(upstream string) http.HandlerFunc {
-	u, _ := url.Parse(upstream)
+func newHandler(upstream *url.URL) http.HandlerFunc {
 	apiRe := regexp.MustCompile(`^/api/\d+/store/$`)
 	proxy := &httputil.ReverseProxy{Director: func(req *http.Request) {}}
 
@@ -68,11 +67,10 @@ func newHandler(upstream string) http.HandlerFunc {
 			return
 		}
 		// Rewrite our request for the proxy
-		req.Host = u.Host
-		req.URL.Scheme = u.Scheme
-		req.URL.Host = u.Host
-		req.URL.Path = u.Path + req.URL.Path
-		req.Header.Set("Host", u.Host)
+		req.Host = upstream.Host
+		req.URL.Scheme = upstream.Scheme
+		req.URL.Host = upstream.Host
+		req.Header.Set("Host", upstream.Host)
 		req.ContentLength = int64(len(body))
 		req.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 		// Sling our mutated request upstream
@@ -90,8 +88,19 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Turn this into a real flag value
+	upstream, err := url.Parse(*upstreamFlag)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if upstream.Scheme == "" || upstream.Host == "" {
+		log.Fatal("Invalid '-upstream' url")
+	}
+	// Truncate the upstream path since it isn't needed
+	upstream.Path = ""
+
 	handler := logger.DefaultHandler(
-		newHandler(*upstreamFlag),
+		newHandler(upstream),
 	)
 
 	server := &http.Server{
@@ -112,7 +121,7 @@ func main() {
                          |___/       |_|                  |___/
 `)
 	fmt.Println("- listen: ", *listenFlag)
-	fmt.Println("- upstream: ", *upstreamFlag)
+	fmt.Println("- upstream: ", upstream)
 	fmt.Println("- read-timeout: ", *readTimeoutFlag)
 	fmt.Println("- write-timeout: ", *writeTimeoutFlag)
 	fmt.Println("\n* Ready to serve.")
