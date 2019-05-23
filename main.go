@@ -99,7 +99,10 @@ func init() {
 
 func main() {
 	if *versionFlag {
-		fmt.Fprintf(os.Stderr, "sentry-proxy version: %s (%s on %s/%s; %s)\n", Version, runtime.Version(), runtime.GOOS, runtime.GOARCH, runtime.Compiler)
+		fmt.Printf(
+			"%s version: %s (%s on %s/%s; %s)\n",
+			os.Args[0], Version, runtime.Version(), runtime.GOOS, runtime.GOARCH, runtime.Compiler,
+		)
 		os.Exit(0)
 	}
 
