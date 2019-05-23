@@ -20,7 +20,7 @@ import (
 )
 
 const Version = "0.0.0"
-const MaxRequestLength = 250 * 1024
+const MaxRequestLength = (200 * 1024) - 1
 
 var (
 	upstreamFlag       = UpstreamFlag("upstream", &url.URL{Scheme: "https", Host: "sentry.io"}, "Upstream Sentry server")
@@ -45,7 +45,7 @@ func newHandler(upstream *url.URL) http.HandlerFunc {
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
 			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
+			ExpectContinueTimeout: 0,
 		},
 	}
 
@@ -63,20 +63,20 @@ func newHandler(upstream *url.URL) http.HandlerFunc {
 		// Make sure we have a valid client IP address to work with
 		clientIP, _, err := net.SplitHostPort(req.RemoteAddr)
 		if err != nil {
-			log.Println(err)
 			http.Error(w, err.Error(), 400)
 			return
 		}
 		body, err := ioutil.ReadAll(http.MaxBytesReader(w, req.Body, MaxRequestLength))
 		req.Body.Close()
 		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), 400)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			http.Error(w, err.Error(), 413)
 			return
 		}
 		// Try to inject our clientIP into the `user.ip_address` chunk
 		body, err = jsonparser.Set(body, []byte(`"`+clientIP+`"`), "user", "ip_address")
 		if err != nil {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 			http.Error(w, "invalid JSON body", 400)
 			return
 		}
